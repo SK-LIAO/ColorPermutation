@@ -134,7 +134,9 @@ def app_spectrum(path):
             conc = data[:,1]
             spec = np.vstack((fiber_spec,spec))
             conc = np.array([0]+list(data[:,1]))
-            Dyes[n] = Build(m,conc.astype(float),spec.astype(float))        
+            Dyes[n] = Build(m,conc.astype(float),spec.astype(float))
+    for d in st_fiber_data:    
+        Dyes[ d[0] ] =  d[2:]
     return Dyes
 
 #回傳主工卡號->併染子工卡陣列字典

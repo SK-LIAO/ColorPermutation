@@ -136,7 +136,6 @@ class MainPage(GUI):
         self.tv.configure(xscrollcommand=xtreescroll.set)
         xtreescroll.pack(side="bottom", fill="x")
         #雙擊選單事件: 複製工卡號/複製指染單號
-
         def copyEKA(event):
             menu = tk.Menu(parent,tearoff=0)
             def copyinE():
@@ -230,7 +229,7 @@ class CheckColor(tk.Toplevel):
                 labelDict[key].config(fg='#FFF')
             labelDict[key].pack(fill='both',expand=True,side='left')
                 
-
+#挑出併染工卡視窗
 class CheckMerge(tk.Toplevel):
     def __init__(self, parent,controller):
         tk.Toplevel.__init__(self, parent, bg="#BEB2A7")
@@ -289,7 +288,7 @@ class CheckMerge(tk.Toplevel):
         tv.bind('<Button-3>', copyEKA) #雙擊出現複製選單
         tv.place(relheight=0.995, relwidth=0.995)
 
- #跳出工卡排序視窗       
+#跳出工卡排序視窗       
 class ColorPermutation(tk.Toplevel):
     def __init__(self, parent,controller):
         tk.Toplevel.__init__(self, parent, bg="#FFF")
@@ -317,6 +316,7 @@ class ColorPermutation(tk.Toplevel):
         Ecards = warning(Ecards)   
         sortresult = app_colorPermutation(Ecards,parent.recipeDict,controller.Dyes)
         ColorPermutationTable(self,sortresult)    
+#工卡排序表格
 class ColorPermutationTable:	
     def __init__(self,root,result):
         lst = result.lst

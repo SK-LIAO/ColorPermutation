@@ -71,7 +71,22 @@ def SpecEst(concls,specls,C,flour=False):
         est_R = f[0] + df_dx*Dx  + d2f_dx2*Dx**2/2
     return np.array(est_R)
 
-    
+#給定光譜矩陣 與 另一布腫光譜
+#將染劑的光譜矩陣轉換到另一布種個光譜舉陣
+#非螢光劑使用 KS力度加法，螢光劑使用光譜差值補充法
+def specTrans(specs,specfiber,flour=True):
+    if flour:
+        Dspecs = specs[1:]-specs[0]
+        newspecs = Dspecs + specfiber
+    else:
+        ksFib0 = np.array([KS(i) for i in specs[0]])
+        ksFib1 = np.array([KS(i) for i in specfiber])
+        Dks = np.array([[KS(i) for i in spec] for spec in specs[1:]]) - ksFib0
+        newkss = Dks + ksFib1
+        newspecs = np.array([[KS2R(i) for i in ks] for ks in newkss])
+    print(np.vstack((specfiber,newspecs)))        
+    return np.vstack((specfiber,newspecs))
+            
 #給定染劑濃度陣列concls 和對映濃度光譜陣列specls
 #方法有: 'equi'(等效),'noequi'(非等效), 'KSaddition'(力度加法)
 #注意:等效、非等效的方法光譜數據為總濃度的光譜、力度加法的光譜為各自濃度的光譜。
@@ -115,16 +130,22 @@ def IsFluo(dyes):
         return False
 
 
-
-#給定targetLAB、數支染劑濃度concls、光譜陣列specls
-#回傳配方組序列
-def DyeMatch(targetLAB,conclsls,speclsls):
-    #給定targetLAB、數據庫裡數支染劑的濃度陣列conclsls、光譜陣列speclsls
+#給定targetLAB、數支染劑濃度concls、光譜陣列specls、是否螢光劑陣列flls
+#回傳配方組序列, 與目標色差, 找到配方的lab 
+def DyeMatch(targetLAB,conclsls,speclsls,flls):
+    #給定targetLAB、數據庫裡數支染劑的濃度陣列conclsls、光譜陣列speclsls、是否含螢光劑fluo
     #回傳濃度網格點最靠近目標LAB的濃度陣列
     specfiber = speclsls[0][0]
     def GridConcMin():
-        Specs = [Merge(np.array(cs),np.array(ls),specfiber) for cs,ls in zip(product(*conclsls),product(*speclsls))] 
-        LabCs = [(Spec2LAB(s),c) for s,c in zip(Specs,product(*conclsls))]
+        mer_specs = []
+        if any(flls):
+            for cs in product(*conclsls):
+                specs = [SpecEst(conc,spec,sum(cs),fl) for conc,spec,fl in zip(conclsls,speclsls,flls)]
+                mer_specs += [Merge(cs,specs,specfiber,'nonequi',True)]
+        else:
+            for cs,specs in zip(product(*conclsls),product(*speclsls)):
+                mer_specs += [Merge(cs,specs,specfiber,'KSadd',False)]
+        LabCs = [(Spec2LAB(s),c) for s,c in zip(mer_specs,product(*conclsls))]
         DeLabCs = [(DE2000(i[0],targetLAB),i[0],i[1]) for i in LabCs]
         S = sorted(DeLabCs,key= lambda x:x[0])
         return S[0][0],np.array(S[0][1]) ,np.array(S[0][2])  
@@ -140,8 +161,13 @@ def DyeMatch(targetLAB,conclsls,speclsls):
         dc = 0.0000001 #配方濃度精度0.0001, 取精度的1/1000取代微分
         for i,c in enumerate(concs):
             newconcs = np.array([c+dc if i==j else c for j,c in enumerate(concs)])
-            specs = np.array([SpecEst(conclsls[i], speclsls[i], c) for i,c in enumerate(newconcs)])
-            newlab = Spec2LAB(Merge(newconcs, specs, specfiber))
+            if any(flls):
+                C = sum(newconcs)
+                specs = np.array([SpecEst(conclsls[i], speclsls[i], C,flls[i]) for i,c in enumerate(newconcs)])
+                newlab = Spec2LAB(Merge(newconcs, specs, specfiber,'nonequi',True))
+            else:
+                specs = np.array([SpecEst(conclsls[i], speclsls[i],c,flls[i]) for i,c in enumerate(newconcs)])
+                newlab = Spec2LAB(Merge(newconcs, specs, specfiber,'KSadd',False))
             DEDC[i] = (DE2000(newlab,targetLAB)-DE2000(lab,targetLAB))/dc
         if np.linalg.norm(DEDC)>1:
             DEDC = DEDC/np.linalg.norm(DEDC)
@@ -164,26 +190,17 @@ def DyeMatch(targetLAB,conclsls,speclsls):
             deltaE = DE2000(targetLAB,lab_temp)
             cAprox = cAprox_temp
             labAprox = lab_temp
-            print('^{}'.format(n),', DE=',deltaE)
-    return cAprox, deltaE
+    return cAprox, deltaE, labAprox
 
 
 #給n支染劑濃度序列組成的矩陣 concs 與 測色後色差矩陣 Dlabs
 #回傳 建議染劑濃度序列
 def ConcCentroid(concs,Dlabs):
-    #給定n維空間n+1點 為基底的矩陣 Mat =  [[-v1-],[-v2-],...,[-vn+1-]]
-    #回傳原點的線性組合係數
-    def LineCoe(Mat):
-        n = len(Mat)
-        bag = np.array(list(combinations(list(range(n)), n-1)))    
-        weight = np.zeros(n)
-        for i in range(n):
-            vectors = Mat[bag[i]]
-            weight[n-i-1] = abs(np.linalg.det(vectors))/factorial(n-1)
-        W = sum(weight)    
-        return weight/W
-    weight = LineCoe(Dlabs)
-    Dconcs = np.array([c-concs[0] for c in concs])
+    concs, Dlabs = np.array(concs), np.array(Dlabs)
+    a = np.array([lab-Dlabs[0] for lab in Dlabs[1:]])
+    b = -Dlabs[0]
+    weight = np.linalg.solve(a.transpose(), b)
+    Dconcs = np.array([c-concs[0] for c in concs[1:]])
     return concs[0] + np.array([w*v for w,v in zip(weight,Dconcs)]).sum(axis=0)
 
 #給定兩張工卡、配方字典、光譜字典,回傳接色後的色差
@@ -277,6 +294,34 @@ def RGB2Hex(RGB):
         # 將R、G、B分別轉化爲16進制拼接轉換並大寫  hex() 函數用於將10進制整數轉換成16進制，以字符串形式表示
         color += str(hex(i))[-2:].replace('x', '0').upper()
     return color
+
+#給定空間座標，回傳正四面體另外三點座標
+def tetrahedron(v):
+    v = np.array(v)
+    e = np.linalg.norm(v)*4/np.sqrt(6)#正四面體單邊長
+    P0 = -v/3 #對面的中心點
+    N = v/np.linalg.norm(v) #法向量
+    
+    i0 = np.argmax([abs(i) for i in v]) 
+    v1 = np.array([1 if i!=i0 else (N[i]-sum(N))/N[i] for i in range(3)])
+    v1 = v1/np.linalg.norm(v1) #取單位長
+    v1 = v1*np.sqrt(3)/3*e 
+    P1 = P0 + v1 #對面的某一頂點
+    #空間旋轉矩陣
+    def rotation(n,theta):
+        c = np.cos(theta)
+        s = np.sin(theta)
+        n1,n2,n3 = n
+        mat = np.array([
+            [c+n1**2*(1-c), n1*n2*(1-c)-n3*s, n1*n3*(1-c)+n2*s],
+            [n1*n2*(1-c)+n3*s, c+n2**2*(1-c), n2*n3*(1-c)-n1*s],
+            [n1*n3*(1-c)-n2*s, n2*n3*(1-c)+n1*s, c+n3**2*(1-c)]
+            ])
+        return mat
+    P2 = rotation(N,2*np.pi/3).dot(P1)
+    P3 = rotation(N,4*np.pi/3).dot(P1)
+    return P1,P2,P3
+    
 
 
     

@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar  7 08:20:31 2022
+Created on Mon Mar 28 08:08:33 2022
 
 @author: A90127
 """
-
 import tkinter as tk
 
 class GUI(tk.Frame):

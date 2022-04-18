@@ -294,8 +294,8 @@ class ColorPermutation(tk.Toplevel):
         tk.Toplevel.__init__(self, parent, bg="#FFF")
         
         self.title('接色排序結果')
-        self.resizable(0, 1) #prevents the app from being resized
-        self.geometry("1000x300+50+10") #fixes the applications size
+        self.resizable(0, 0) #prevents the app from being resized
+        self.geometry("1000x750+50+10") #fixes the applications size
         self.iconbitmap('LC.ico')
         
         #抓取要排序的工卡號

@@ -14,8 +14,8 @@ Created on Fri Apr  9 08:12:54 2021
 import numpy as np
 
 from cieMath import KS, KS2R, Spec2LAB,Spec2RGB ,DE2000
-from itertools import product, combinations
-from math import factorial
+from itertools import product
+
 
 def SpecEst(concls,specls,C,flour=False):     
     if C<0:
@@ -78,14 +78,13 @@ def specTrans(specs,specfiber,flour=True):
     if flour:
         Dspecs = specs[1:]-specs[0]
         newspecs = Dspecs + specfiber
-        return np.vstack((specfiber,newspecs))
     else:
         ksFib0 = np.array([KS(i) for i in specs[0]])
         ksFib1 = np.array([KS(i) for i in specfiber])
         Dks = np.array([[KS(i) for i in spec] for spec in specs[1:]]) - ksFib0
         newkss = Dks + ksFib1
         newspecs = np.array([[KS2R(i) for i in ks] for ks in newkss])
-        return np.vstack(specfiber,newspecs)
+    return np.vstack((specfiber,newspecs))
             
 #給定染劑濃度陣列concls 和對映濃度光譜陣列specls
 #方法有: 'equi'(等效),'noequi'(非等效), 'KSaddition'(力度加法)
@@ -102,16 +101,16 @@ def Merge(concs,specs,specfiber,method='KSadd',flour=False):
         return specs[0]
     C = sum(concs)
     if method=='nonequi':                   
-        impls = [c*np.power(abs(np.array(specfiber-R)),0.35) for c,R in zip(concs,specs)]
+        impls = np.array([c*np.power(abs(np.array(specfiber-R)),0.35) for c,R in zip(concs,specs)])
         R_est = np.zeros(len(specfiber))
         for coe, R in zip(impls,specs):
-            R_est += np.array(coe)*np.array(R)/sum(np.array(impls))
+            R_est = R_est + np.array(coe)*np.array(R)/sum(impls)
     elif method=='equi':
-        DR_dye = [R-specfiber for R in specs]
+        DR_dye = np.array([R-specfiber for R in specs])
         R_est = np.zeros(len(specfiber)) + specfiber 
         for c, R in zip(concs,DR_dye):
             if C>0:
-                R_est += c/C*R
+                R_est = R_est + c/C*R
     else:
         ksfiber = np.array([KS(r) for r in specfiber])
         ksls = np.array([[KS(r1)-KS(r2) for r1,r2 in zip(spec,specfiber)] for spec in specs ])
@@ -204,84 +203,114 @@ def ConcCentroid(concs,Dlabs):
     return concs[0] + np.array([w*v for w,v in zip(weight,Dconcs)]).sum(axis=0)
 
 #給定兩張工卡、配方字典、光譜字典,回傳接色後的色差
-def ContactDE(card1,card2,recipeDict,specDict):
-    dyes1, concs1 = recipeDict[card1].dyes, recipeDict[card1].concs
-    dyes2, concs2 = recipeDict[card2].dyes, recipeDict[card2].concs
+def ContactDE(card1,card2,Recipes,Dyes):
+    dyes1, concs1 = Recipes[card1].dyes, Recipes[card1].concs
+    dyes2, concs2 = Recipes[card2].dyes, Recipes[card2].concs
     #色差矩陣
-    err = np.zeros((3,3))
-    #殘留量矩陣
-    residue = np.array([[ 0.05, 0.05, 0.05],
-                        [ 0.00, 0.05, 0.00],
-                        [ 0.01, 0.01, 0.05]])
+    err = np.zeros(3)
+    #染劑對胚布的影響係數
+    effectiveCoe = np.array([[1  , 1  , 1  ],
+                             [0  , 1  , 0  ],
+                             [0.2, 0.2, 1  ]])
+    #殘留濃度係數
+    r = 0.05
+    #使用胚布的材質
+    fm = set([Dyes[n].material for n in dyes2])
     fibtype = ['T','N','D']
-    fiberSpec = [specDict[i].spec[0,:] for i in ['TR101','NR101','DR101']] 
-    for i in range(3):
-        for j in range(3):
-            conc1 = [c for c, n in zip(concs1,dyes1) if specDict[n].material==fibtype[i] ]
-            name1 = [n for n in dyes1 if specDict[n].material==fibtype[i] ]
-            conc2 = [c for c, n in zip(concs2,dyes2) if specDict[n].material==fibtype[j] ]
-            name2 = [n for n in dyes2 if specDict[n].material==fibtype[j] ]
-            #判定是否含螢光劑
-            fl = IsFluo(list(name1)+list(name2))
-
-        #若沒接到色則色差為0，有接色才計算色差
-            if name2==[] or name1==[]:
-                continue
+    for i,m in enumerate(fibtype):
+        #會受影響的材質
+        eM = [fibtype[j] for j in range(3) if effectiveCoe[j,i]]
+        #胚布光譜
+        specfib = Dyes[m+'Fiber']
+        conc1 = [c for c, n in zip(concs1,dyes1) if Dyes[n].material in eM ]
+        name1 = [n for n in dyes1 if Dyes[n].material in eM ]
+        #可上色染劑影響係數
+        coes1 = [effectiveCoe[fibtype.index(Dyes[n].material),i] for n in name1]
+        #可上色染劑濃度乘上影響係數
+        conc1 = [c*coe for c,coe in zip(conc1,coes1)]        
+        conc2 = [c for c, n in zip(concs2,dyes2) if Dyes[n].material in eM ]
+        name2 = [n for n in dyes2 if Dyes[n].material in eM ]
+        #可上色染劑影響係數
+        coes2 = [effectiveCoe[fibtype.index(Dyes[n].material),i] for n in name2]
+        #可上色染劑濃度乘上影響係數
+        conc2 = [c*coe for c,coe in zip(conc2,coes2)]
+        #判定是否含螢光劑
+        fl = IsFluo(list(name1)+list(name2))
+        if not name1:
+            continue
+        #只考下一缸使用的胚布材質
+        if m in fm:
+            #如果含有螢光劑採用nonequi演算法
+            if fl:
+                #理想光譜
+                specls_re = [SpecEst(Dyes[n].conc,Dyes[n].spec,sum(conc2),IsFluo([n])) if Dyes[n].material==m else
+                             SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,specfib,IsFluo([n])),sum(conc2),IsFluo([n])) for n in name2]
+                spec_re = Merge(conc2,specls_re,specfib,'nonequi',True)
+                #混色光譜
+                #c1, c2 = sum(conc1), sum(conc2)
+                conc1_mer = [c*r/(1+r) for c in conc1]
+                conc2_mer = [c/(1+r) for c in conc2]
+                c = sum(conc1_mer+conc2_mer)
+                specls1_mer = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) if Dyes[n].material==m else
+                               SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,specfib,IsFluo([n])),c,IsFluo([n])) for n in name1]
+                specls2_mer = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) if Dyes[n].material==m else
+                               SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,specfib,IsFluo([n])),c,IsFluo([n])) for n in name2]        
+                spec_mer = Merge(conc2_mer+conc1_mer,specls2_mer+specls1_mer,specfib,'nonequi',True)
+            #不含螢光劑才用KSadd演算法
             else:
-                #根據殘留矩陣估計殘留染劑給下一缸、且先不考慮缸量差
-                #但前一缸無染劑則殘留係數為0,避免下一缸被稀釋。
-                if len(conc1)==0:
-                    r = 0
-                else:
-                    r = residue[i,j]
-                #如果含有螢光劑採用nonequi演算法
-                if fl:
-                    #理想光譜
-                    specls_re = [SpecEst(specDict[n].conc,specDict[n].spec,sum(conc2),IsFluo([n])) for n in name2]
-                    spec_re = Merge(conc2,specls_re,fiberSpec[j],'nonequi',True)
-                    #混色光譜
-                    conc1_mer = [c*r/(1+r) for c in conc1]
-                    conc2_mer = [c/(1+r) for c in conc2]
-                    c = sum(conc1_mer+conc2_mer)
-                    specls1_mer = [SpecEst(specDict[n].conc,specDict[n].spec,c,IsFluo([n])) for n in name1]
-                    specls2_mer = [SpecEst(specDict[n].conc,specDict[n].spec,c,IsFluo([n])) for n in name2]        
-                    spec_mer = Merge(conc2_mer+conc1_mer,specls2_mer+specls1_mer,fiberSpec[j],'nonequi',True)
-                #不含螢光劑才用KSadd演算法
-                else:
-                    #找理想光譜
-                    specls_re = [SpecEst(specDict[n].conc,specDict[n].spec,c,IsFluo([n])) for c,n in zip(conc2,name2)]
-                    spec_re = Merge(conc2,specls_re,fiberSpec[j],'KSadd',False)
-                    #找混色光譜
-                    conc1_mer = [c*r/(1+r) for c in conc1]
-                    conc2_mer = [c/(1+r) for c in conc2]
-                    #將同染劑融合
-                    name = list(set(name1+name2))
-                    conc_mer = [sum([c for c,n in zip(conc1_mer+conc2_mer,name1+name2) if n==m]) for m in name]
-                    specls_mer = [SpecEst(specDict[n].conc,specDict[n].spec,c,IsFluo([n])) for c,n in zip(conc_mer,name)]
-                    spec_mer = Merge(conc_mer, specls_mer, fiberSpec[j],'KSadd',False)                   
-                #存進色差矩陣
-                err[i,j] = DE2000(Spec2LAB(spec_re),Spec2LAB(spec_mer))
+                #找理想光譜
+                specls_re = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) if Dyes[n].material==m else
+                             SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,specfib,IsFluo([n])),c,IsFluo([n])) for c,n in zip(conc2,name2)]
+                spec_re = Merge(conc2,specls_re,specfib,'KSadd',False)
+                #找混色光譜
+                #c1, c2 = sum(conc1), sum(conc2)
+                conc1_mer = [c*r/(1+r) for c in conc1]
+                conc2_mer = [c/(1+r) for c in conc2]
+                #將同染劑融合
+                name = list(set(name1+name2))
+                conc_mer = [sum([c for c,n in zip(conc1_mer+conc2_mer,name1+name2) if n==m]) for m in name]
+                specls_mer = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) if Dyes[n].material==m else 
+                              SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,specfib,IsFluo([n])),c,IsFluo([n])) for c,n in zip(conc_mer,name)]
+                spec_mer = Merge(conc_mer, specls_mer, specfib,'KSadd',False)                   
+            #存進色差矩陣
+            err[i] = DE2000(Spec2LAB(spec_re),Spec2LAB(spec_mer))
     return round(np.max(err),2)
 
 #給定工卡號、配方字典、光譜字典
 #回傳材質對應顏色的RGB字典
-def app_colorVisual(card,recipeDict,Dyes): 
-    allconcs = recipeDict[card].concs
-    alldyes = recipeDict[card].dyes
+def app_colorVisual(card,Recipes,Dyes): 
+    #使用染劑的濃度
+    allconcs = Recipes[card].concs
+    #使用的染劑
+    alldyes = Recipes[card].dyes
+    #使用胚布的材質
+    fm = set([Dyes[n].material for n in alldyes])
     
+    #染劑對胚布的影響係數
+    effectiveCoe = np.array([[1,1,1],[0,1,0],[0.2,0.2,1]])
     colorDict={}
     material = ['T','N','D']
-    for m in material:
-        dyes = [n for n in alldyes if Dyes[n].material==m]
-        if len(dyes)>0:
-            concs = [c for c,n in zip(allconcs,alldyes) if Dyes[n].material==m]
+    for i,m in enumerate(material):
+        #會受影響的材質
+        effectiveMaterial = [material[j] for j in range(3) if effectiveCoe[j,i]]
+        #可上色染劑名稱
+        dyes = [n for n in alldyes if Dyes[n].material in effectiveMaterial]
+        if m in fm:
+            #可上色染劑濃度
+            concs = [c for c,n in zip(allconcs,alldyes) if Dyes[n].material in effectiveMaterial]
+            #可上色染劑修正係數
+            coes = [effectiveCoe[material.index(Dyes[n].material),i] for n in dyes]
+            #可上色染劑濃度乘上修正係數
+            concs = [c*coe for c,coe in zip(concs,coes)]
             cl = IsFluo(dyes)
-            fiberspec = Dyes[dyes[0]].spec[0]
+            fiberspec = Dyes[m+'Fiber']
             if cl:
-                specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,sum(concs),IsFluo([n])) for n in dyes]
+                specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,sum(concs),IsFluo([n])) if Dyes[n].material == m else 
+                         SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,fiberspec,IsFluo([n])),sum(concs),IsFluo([n])) for n in dyes]
                 spec_est = Merge(concs, specs, fiberspec,'nonequi',True)
             else:
-                specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) for c,n in zip(concs,dyes)]
+                specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) if Dyes[n].material == m else
+                         SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,fiberspec,IsFluo([n])),c,IsFluo([n])) for c,n in zip(concs,dyes)]
                 spec_est = Merge(concs, specs, fiberspec,'KSadd',False)  
             rgb = RGB2Hex(Spec2RGB(spec_est))
             colorDict[m] = rgb

@@ -302,7 +302,7 @@ def app_colorVisual(card,Recipes,Dyes):
             coes = [effectiveCoe[material.index(Dyes[n].material),i] for n in dyes]
             #可上色染劑濃度乘上修正係數
             concs = [c*coe for c,coe in zip(concs,coes)]
-            cl = IsFluo(dyes)
+            cl = IsFluo(dyes) #放在這裡有些顏色算不出來
             fiberspec = Dyes[m+'Fiber']
             if cl:
                 specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,sum(concs),IsFluo([n])) if Dyes[n].material == m else 
@@ -314,6 +314,46 @@ def app_colorVisual(card,Recipes,Dyes):
                 spec_est = Merge(concs, specs, fiberspec,'KSadd',False)  
             rgb = RGB2Hex(Spec2RGB(spec_est))
             colorDict[m] = rgb
+    return colorDict
+
+#給定工卡號、配方字典、光譜字典
+#回傳材質對應顏色的LAB字典
+def app_E2LAB(card,Recipes,Dyes): 
+    #使用染劑的濃度
+    allconcs = Recipes[card].concs
+    #使用的染劑
+    alldyes = Recipes[card].dyes
+    #使用胚布的材質
+    fm = set([Dyes[n].material for n in alldyes])
+    
+    #染劑對胚布的影響係數
+    effectiveCoe = np.array([[1,1,1],[0,1,0],[0.2,0.2,1]])
+    colorDict={}
+    material = ['T','N','D']
+    for i,m in enumerate(material):
+        #會受影響的材質
+        effectiveMaterial = [material[j] for j in range(3) if effectiveCoe[j,i]]
+        #可上色染劑名稱
+        dyes = [n for n in alldyes if Dyes[n].material in effectiveMaterial]
+        if m in fm:
+            #可上色染劑濃度
+            concs = [c for c,n in zip(allconcs,alldyes) if Dyes[n].material in effectiveMaterial]
+            #可上色染劑修正係數
+            coes = [effectiveCoe[material.index(Dyes[n].material),i] for n in dyes]
+            #可上色染劑濃度乘上修正係數
+            concs = [c*coe for c,coe in zip(concs,coes)]
+            cl = IsFluo(dyes) #放在這裡有些顏色算不出來
+            fiberspec = Dyes[m+'Fiber']
+            if cl:
+                specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,sum(concs),IsFluo([n])) if Dyes[n].material == m else 
+                         SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,fiberspec,IsFluo([n])),sum(concs),IsFluo([n])) for n in dyes]
+                spec_est = Merge(concs, specs, fiberspec,'nonequi',True)
+            else:
+                specs = [SpecEst(Dyes[n].conc,Dyes[n].spec,c,IsFluo([n])) if Dyes[n].material == m else
+                         SpecEst(Dyes[n].conc,specTrans(Dyes[n].spec,fiberspec,IsFluo([n])),c,IsFluo([n])) for c,n in zip(concs,dyes)]
+                spec_est = Merge(concs, specs, fiberspec,'KSadd',False)  
+            lab = Spec2LAB(spec_est)
+            colorDict[m] = lab
     return colorDict
 
 # RGB格式顏色轉換爲16進制顏色格式

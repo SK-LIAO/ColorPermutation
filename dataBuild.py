@@ -26,6 +26,8 @@ def isdata(d):
 def myfunc(path):
     data = np.array(read_csv(path,low_memory=False))
     heads = np.array(read_csv(path[:-4]+'-head.csv').columns)
+    #只考慮斗工場工卡
+    data = np.array([d for d in data if d[0][0]=='E'])
     return data, heads
 #回傳在染房待染工卡數據 
 def app_waitDye(path):
@@ -158,5 +160,5 @@ def mergeE(path):
 #---------測試碼-------
 
 if __name__ == '__main__':
-    path = r'D:\A90127\ColorPermutation\excel\spectrum_dye_ver1.xlsx'
+    path = r'D:\A90127\ColorPermutation\data\spectrum_dye_ver1.xlsx'
     Dyes = app_spectrum(path) 

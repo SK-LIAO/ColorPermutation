@@ -8,6 +8,7 @@ Created on Fri Mar 18 08:02:38 2022
 from DyeMerge import IsFluo,SpecEst,Merge,ContactDE
 from cieMath import Spec2LAB 
 from numpy import array
+from DyeMerge import app_E2LAB
 
 '''
 將工卡依照接色後汙染最小排序
@@ -63,6 +64,7 @@ class app_colorPermutation:
     #給工卡號、染劑字典、回傳LAB值，非單色回傳較深顏色的LAB。
     def E2LAB(self,e):
         material = ['T','N','D']
+        '''
         labs = []
         for m in material:
             dyes = [d for d in self.E2recipe[e].dyes if self.D2spec[d].material==m]
@@ -80,6 +82,10 @@ class app_colorPermutation:
                     labs += [ array([round(i,2) for i in Spec2LAB(spec)]) ]
             else:
                 labs += [ array([100,0,0]) ]
+        '''
+        
+        _dict = app_E2LAB(e,self.E2recipe,self.D2spec)
+        labs = [_dict[m] if m in _dict.keys() else array([100,0,0]) for m in material]
         #順便儲存下工卡的Lab座標
         self.LABdict[e] = [[] if i[0]==100 else list(i) for i in labs]
         #回傳最深色Lab座標

@@ -37,6 +37,7 @@ def Strength(ls1, ls2):
 #給定反射率光譜陣列 spe, 光譜最小波長 lmin, 光譜最大波長 lmax, 波長間距 dl
 #回傳 該光譜之 CIEXYZ 值  X_ref/Y_D65, Y_ref/Y_D65, Z_ref/Y_D65
 def Spec2XYZ(ls):
+    ls = np.array([1 if np.isnan(i) else i for i in ls])
     x, y, z = observer   
     S = SPD_D65
     Sx, Sy, Sz = S*x, S*y, S*z 

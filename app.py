@@ -14,6 +14,7 @@ import tkinter.messagebox
 from app_dataPage import DataBuildPage
 from app_mainPage import MainPage
 from app_authorPage import AuthorPage
+from app_dyemachinePage import DyeMachinePage
 
 class MyApp(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -21,14 +22,14 @@ class MyApp(tk.Tk):
         
         main_frame = tk.Frame(self, bg="#84CEEB")
         main_frame.pack(fill="both", expand="true")
-     
+        
         self.resizable(0, 0) #禁止調整視窗大小
         self.geometry("1024x600+504+20") #調整視窗大小及位置
         self.iconbitmap('LC.ico') 
         
         #準備製作各子頁面
         self.frames = {} #收集所有框架用       
-        pages = (DataBuildPage,MainPage,AuthorPage)
+        pages = (DataBuildPage,MainPage,DyeMachinePage,AuthorPage)
         for F in pages:
             frame = F(main_frame, self) #建立框架
             self.frames[F] = frame #將框架存入 self 裡
@@ -63,6 +64,7 @@ class MenuBar(tk.Menu):
         menu_main = tk.Menu(self, tearoff=0)
         self.add_cascade(label="主程式", menu=menu_main)
         menu_main.add_command(label='分析排序', command=lambda: parent.show_frame(MainPage))
+        menu_main.add_command(label='機台設定', command=lambda: parent.show_frame(DyeMachinePage))
         
         menu_expression = tk.Menu(self, tearoff=0)
         self.add_cascade(label="說明", menu=menu_expression)
